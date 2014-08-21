@@ -1,0 +1,4 @@
+bin/*
+src/build/*
+src/cython/*.c
+src/cython/*.h
