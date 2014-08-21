@@ -958,18 +958,18 @@ cdef dict getHaplotypeInfo(list haplotypes, dict variantPosteriors, double* hapl
 
 ###################################################################################################
 
-cdef double computeAlleleBiasPValue(int totalReads, int variantReads):
+cdef double computeAlleleBiasPValue(int totalReads, int variantReads, int lowRefAlleleBias):
     """
     Compute and return allele-bias p-value
     """
     cdef double pValue = 0.0
 
-    # Frequency is higher than het.
-    if totalReads > 0 and <double>variantReads / <double>(totalReads) >= 0.5:
+    # No reads touching variant
+    if totalReads == 0:
         return 1.0
 
-    # No reads touching variant
-    elif totalReads == 0:
+    # Frequency is higher than het.
+    if totalReads > 0 and not lowRefAlleleBias and <double>variantReads / <double>(totalReads) >= 0.5:
         return 1.0
 
     # Compare total variant reads to total coverage, and computed frequency
@@ -1061,6 +1061,7 @@ cdef dict vcfINFO(double* haplotypeFrequencies, dict variantPosteriors, list gen
     cdef int windowIndex = 0
     cdef int startPosOfVarInRead = 0
     cdef int countOnlyExactIndelMatches = options.countOnlyExactIndelMatches
+    cdef int lowRefAlleleBias = options.lowRefAlleleBias
     cdef float RMSMQ = 0
     cdef bint varInGenotype = False
     cdef cAlignedRead** pStartRead
@@ -1204,7 +1205,7 @@ cdef dict vcfINFO(double* haplotypeFrequencies, dict variantPosteriors, list gen
             nVarReadsPerSample.append(nVarReadsThisSample)
 
         # Compute per-sample strand-bias
-        INFO[variant]['ABPV'] = [round(computeAlleleBiasPValue(TC_ab, TR_ab), 2)]
+        INFO[variant]['ABPV'] = [round(computeAlleleBiasPValue(TC_ab, TR_ab, lowRefAlleleBias), 2)]
         INFO[variant]['SbPval'] = [round(computeStrandBiasPValue(TCF_sb, TCR_sb, NF_sb, NR_sb), 2)]
         INFO[variant]['TR'] = [TR]
         INFO[variant]['NF'] = [NF]
