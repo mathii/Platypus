@@ -14,6 +14,7 @@ import datetime
 import platypusutils
 import vcfutils
 import chaplotype
+import sys
 
 cimport platypusutils
 cimport vcfutils
@@ -141,19 +142,19 @@ cdef void callVariantsInWindow(dict window, options, FastaFile refFile, list rea
 
 ###################################################################################################
 
-cdef int countTotalReadsInRegion(list readBuffers, int* totalBufferSize, int* totalSeqQualSize):
+def countTotalReadsInRegion(list readBuffers):
     """
     Count and return the total number of reads (good, bad, broken)
     loaded into the read buffers.
     """
-    cdef int totalReads = 0
     cdef bamReadBuffer theReadBuffer
-    cdef int thisBufferSize = 0
-    cdef int i = 0
-    cdef int cigarSize = 0
-    cdef int seqQualSize = 0
-    cdef int readSize = 0
-    cdef int pointerSize = 0
+    totalReads = 0
+    cigarSize = 0
+    seqQualSize = 0
+    readSize = 0
+    pointerSize = 0
+    totalBufferSize = 0
+    totalSeqQualSize = 0
 
     for theReadBuffer in readBuffers:
         thisBufferSize = theReadBuffer.reads.getSize()
@@ -161,15 +162,15 @@ cdef int countTotalReadsInRegion(list readBuffers, int* totalBufferSize, int* to
         totalReads += (theReadBuffer.reads.getSize())
         totalReads += (theReadBuffer.badReads.getSize())
         totalReads += (theReadBuffer.brokenMates.getSize())
-        totalBufferSize[0] += (theReadBuffer.reads.__capacity)
-        totalBufferSize[0] += (theReadBuffer.badReads.__capacity)
-        totalBufferSize[0] += (theReadBuffer.brokenMates.__capacity)
+        totalBufferSize += (theReadBuffer.reads.__capacity)
+        totalBufferSize += (theReadBuffer.badReads.__capacity)
+        totalBufferSize += (theReadBuffer.brokenMates.__capacity)
 
         for i in range(thisBufferSize):
-            totalSeqQualSize[0] += (strlen(theReadBuffer.reads.array[i].seq) + 1)
-            totalSeqQualSize[0] += (strlen(theReadBuffer.reads.array[i].qual) + 1)
+            totalSeqQualSize += (strlen(theReadBuffer.reads.array[i].seq) + 1)
+            totalSeqQualSize += (strlen(theReadBuffer.reads.array[i].qual) + 1)
 
-            totalSeqQualSize[0] += 2*theReadBuffer.reads.array[i].cigarLen
+            totalSeqQualSize += 2*theReadBuffer.reads.array[i].cigarLen
 
             seqQualSize += (strlen(theReadBuffer.reads.array[i].seq) + 1)
             seqQualSize += (strlen(theReadBuffer.reads.array[i].qual) + 1)
@@ -177,10 +178,10 @@ cdef int countTotalReadsInRegion(list readBuffers, int* totalBufferSize, int* to
             cigarSize += 2*theReadBuffer.reads.array[i].cigarLen*sizeof(theReadBuffer.reads.array[0].cigarOps[0])
 
         for i in range(thisBadBufferSize):
-            totalSeqQualSize[0] += (strlen(theReadBuffer.badReads.array[i].seq) + 1)
-            totalSeqQualSize[0] += (strlen(theReadBuffer.badReads.array[i].qual) + 1)
+            totalSeqQualSize += (strlen(theReadBuffer.badReads.array[i].seq) + 1)
+            totalSeqQualSize += (strlen(theReadBuffer.badReads.array[i].qual) + 1)
 
-            totalSeqQualSize[0] += 2*theReadBuffer.badReads.array[i].cigarLen
+            totalSeqQualSize += 2*theReadBuffer.badReads.array[i].cigarLen
 
             seqQualSize += (strlen(theReadBuffer.badReads.array[i].seq) + 1)
             seqQualSize += (strlen(theReadBuffer.badReads.array[i].qual) + 1)
@@ -188,23 +189,23 @@ cdef int countTotalReadsInRegion(list readBuffers, int* totalBufferSize, int* to
             cigarSize += 2*theReadBuffer.badReads.array[i].cigarLen*sizeof(theReadBuffer.reads.array[0].cigarOps[0])
 
         # Size of reads
-        totalSeqQualSize[0] += sizeof(theReadBuffer.reads.array[0][0])*thisBufferSize
-        totalSeqQualSize[0] += sizeof(theReadBuffer.badReads.array[0][0])*thisBadBufferSize
+        totalSeqQualSize += sizeof(theReadBuffer.reads.array[0][0])*thisBufferSize
+        totalSeqQualSize += sizeof(theReadBuffer.badReads.array[0][0])*thisBadBufferSize
 
         readSize += sizeof(theReadBuffer.reads.array[0][0])*thisBufferSize
         readSize += sizeof(theReadBuffer.badReads.array[0][0])*thisBadBufferSize
 
         # Size of pointers to reads
-        totalSeqQualSize[0] += sizeof(theReadBuffer.reads.array[0])*theReadBuffer.reads.__capacity
-        totalSeqQualSize[0] += sizeof(theReadBuffer.reads.array[0])*theReadBuffer.badReads.__capacity
+        totalSeqQualSize += sizeof(theReadBuffer.reads.array[0])*theReadBuffer.reads.__capacity
+        totalSeqQualSize += sizeof(theReadBuffer.reads.array[0])*theReadBuffer.badReads.__capacity
 
         pointerSize += sizeof(theReadBuffer.reads.array[0])*theReadBuffer.reads.__capacity
         pointerSize += sizeof(theReadBuffer.reads.array[0])*theReadBuffer.badReads.__capacity
 
-    cdef int totalSize = seqQualSize + cigarSize + readSize + pointerSize
+    totalSize = seqQualSize + cigarSize + readSize + pointerSize
     logger.debug("Sizes: SeqQual = %s. cigar = %s. read = %s. pointers = %s. Total = %s" %(seqQualSize, cigarSize, readSize, pointerSize, totalSize))
 
-    return totalReads
+    return totalReads,totalBufferSize,totalSeqQualSize
 
 ###################################################################################################
 
@@ -362,13 +363,10 @@ cdef list generateVariantsInRegion(bytes chrom, int start, int end, bamFiles, Fa
     cdef int maxReadLength = options.rlen
     cdef int longestRead = 0
     cdef int minSampleCoverage = -1
-    cdef int totalBufferSizeInRegion = 0
-    cdef int totalSeqQualSize = 0
-    cdef int totalReadsInRegion = 0
     cdef double minVarFreq = options.minVarFreq
 
     if options.verbosity >= 3:
-        totalReadsInRegion = countTotalReadsInRegion(readBuffers, &totalBufferSizeInRegion, &totalSeqQualSize)
+        totalReadsInRegion,totalBufferSizeInRegion,totalSeqQualSize = countTotalReadsInRegion(readBuffers)
         logger.debug("There are %s reads (buffer size = %s. Total reads size = %s bytes) in the region %s:%s-%s" %(totalReadsInRegion, totalBufferSizeInRegion, totalSeqQualSize, chrom, start, end))
 
 
@@ -414,8 +412,19 @@ cdef list generateVariantsInRegion(bytes chrom, int start, int end, bamFiles, Fa
         # Add candidates from all samples to list
         rawBamVariants.extend(allSampleVarCandGen.getCandidates(0))
 
+        # options.rlen over-rides the data, if set, otherwise we use the longest read
+        # in the data
         if longestRead > 0:
-            options.rlen = longestRead
+            if longestRead >= options.maxSize:
+                logger.warning("Found very long read (%s bases). Capping max read length at --maxSize (%s)." %(longestRead, options.maxSize))
+                logger.warning("Longer reads will be used for alignments but not to determine window boundaries")
+                logger.warning("Increase --maxSize if you want longer reads to be used for determining widow boundaries")
+                logger.warning("But keep --maxSize below 5000 otherwise problems will occur downstream and may lead to crashes")
+                options.rlen = options.maxSize
+            else:
+                options.rlen = longestRead
+
+    maxReadLength = options.rlen
 
     # Get variants from external VCF source file
     if options.sourceFile:
@@ -498,11 +507,12 @@ cdef void callVariantsInRegion(bytes chrom, int start, int end, bamFiles, FastaF
             windowStart = window['startPos']
             windowEnd = window['endPos']
 
-            if windowEnd - windowStart > options.maxSize:
+            if windowEnd - windowStart > options.maxSize and len(window['variants']) > 0:
                 logger.info("Skipping very large window %s:%s-%s of size %s. Max window size is %s (set in option --maxSize)" %(chrom, windowStart, windowEnd, windowEnd - windowStart, options.maxSize))
                 continue
 
-            callVariantsInWindow(window, options, refFile, readBuffers, pop, start, end, refSequence)
+            if len(window['variants']) > 0:
+                callVariantsInWindow(window, options, refFile, readBuffers, pop, start, end, refSequence)
 
             if len(window['variants']) > 0 and len(pop.variantPosteriors.keys()) > 0:
                 outputCallToVCF(pop.varsByPos, pop.vcfInfo, pop.vcfFilter, pop.haplotypes, pop.genotypes, pop.frequencies, pop.genotypeLikelihoods, pop.goodnessOfFitValues, pop.haplotypeIndexes, pop.readBuffers, pop.nIndividuals, vcf, refFile, outputFile, options, pop.variants, window['startPos'], window['endPos'])
@@ -518,8 +528,8 @@ cdef void callVariantsInRegion(bytes chrom, int start, int end, bamFiles, FastaF
                             nextVarPos = min([v.minRefPos for v in theseVars]) + 1 # To account for VCF 1-indexing vs Variant 0-indexing
 
                             if nextVarPos - lastVarPos > 1:
-                                for refBlockStart in xrange(lastVarPos+1, nextVarPos, 1000):
-                                    refBlockEnd = min(refBlockStart + 1000, nextVarPos-1)
+                                for refBlockStart in xrange(lastVarPos+1, nextVarPos, options.refCallBlockSize):
+                                    refBlockEnd = min(refBlockStart + options.refCallBlockSize, nextVarPos-1)
 
                                     if refBlockStart == refBlockEnd:
                                         continue
@@ -570,45 +580,22 @@ def outputRefCall(bytes chrom, Population pop, vcfFile, FastaFile refFile, outpu
     """
     cdef int windowStart = window['startPos']
     cdef int windowEnd = window['endPos']
+    cdef int windowSize = windowEnd - windowStart
     cdef list variants = window['variants']
     cdef int nIndividuals = len(readBuffers)
     cdef bamReadBuffer theBuffer
 
-    #logger.debug("Making ref call in region %s:%s-%s" %(chrom, windowStart, windowEnd))
-
-    cdef list genotypes = pop.genotypes
-    cdef int refIndex = 0
-    cdef DiploidGenotype genotype = None
-    cdef Haplotype hap1 = None
-    cdef Haplotype hap2 = None
-
-    for index,genotype in enumerate(genotypes):
-
-        hap1 = genotype.hap1
-        hap2 = genotype.hap2
-
-        if len(hap1.variants) == 0 and len(hap2.variants) == 0:
-            refIndex = index
-            break
-    else:
-        raise StandardError, "Could not find ref in genotype list. There are %s genotypes. They are %s" %(len(genotypes), genotypes)
-
-    cdef int isZeroCoverageBAM = 0
-    cdef int minReadsForSample = -1
-    cdef int readsThisSample = 0
+    cdef int minCov = -1
+    cdef int theStart = 0
+    cdef int granularity = 1
 
     for index,theBuffer in enumerate(readBuffers):
-
-        readsThisSample = theBuffer.reads.windowEnd - theBuffer.reads.windowStart
-
-        if minReadsForSample == -1:
-            minReadsForSample = readsThisSample
-        else:
-            minReadsForSample = min(minReadsForSample, readsThisSample)
-
-        if readsThisSample == 0:
-            isZeroCoverageBAM = 1
-
+        
+        for theStart in range(windowStart, windowEnd, granularity):
+            if minCov == -1:
+                minCov = theBuffer.countReadsCoveringRegion(theStart, theStart+1)
+            else:
+                minCov = min(minCov, theBuffer.countReadsCoveringRegion(theStart, theStart+1))
 
     # What should the qual value be for this?
     #
@@ -619,9 +606,9 @@ def outputRefCall(bytes chrom, Population pop, vcfFile, FastaFile refFile, outpu
     # 3) If there are reads and candidates, then the posterior must be related to the posterior of the best variant
     #    candidate. Try qual == phred( min( (1.0 - max(varPosteriors), sum(mapQuals)/sizeof(window) ) ) )
 
-    cdef int phredPValue = int(-10*log10(betaBinomialCDF(0, minReadsForSample, 20, 20)))
+    cdef int phredPValue = int(-10*log10(betaBinomialCDF(0, minCov, 20, 20)))
 
-    if isZeroCoverageBAM:
+    if minCov == 0:
         qual = 0
     else:
         if len(variants) == 0:
@@ -648,7 +635,7 @@ def outputRefCall(bytes chrom, Population pop, vcfFile, FastaFile refFile, outpu
     linefilter = ["REFCALL"]
     lineinfo = {}
     lineinfo['END'] = [windowEnd]
-    lineinfo['Size'] = [windowEnd-windowStart]
+    lineinfo['Size'] = [windowSize]
 
     # I'll fill in some of these later.
     lineinfo['FR'] = ["."]
@@ -753,6 +740,14 @@ class PlatypusSingleProcess(object):
         logger.debug("Max genotypes = %s" %(self.options.maxGenotypes))
 
         options.nInd = len(set(self.samples))
+        
+        if options.alignScoreFile != "":
+            logger.info("Alignment scores of reads with haplotypes are written to %s" %(options.alignScoreFile))
+            fo = open(options.alignScoreFile, "w")
+            fo.write("#Alignment scores of reads against haplotypes within a each window for each sample\n")
+            fo.close()
+
+
 
     def run(self):
         """
@@ -772,7 +767,10 @@ class PlatypusSingleProcess(object):
             logger.info("Opening file %s for appending" %(self.fileName))
             self.outputFile = open(self.fileName, 'a')
         else:
-            self.outputFile = open(self.fileName, 'w')
+            if self.fileName == "-":
+                self.outputFile = sys.stdout
+            else:
+                self.outputFile = open(self.fileName, 'w')
             self.vcf.writeheader(self.outputFile)
 
         cdef Population pop = Population(self.options)
@@ -788,7 +786,8 @@ class PlatypusSingleProcess(object):
 
             callVariantsInRegion(chrom, start, end, self.bamFiles, self.refFile, self.options, self.windowGenerator, self.outputFile, self.vcf, self.samples, self.samplesByID, self.samplesByBAM, pop)
 
-        self.outputFile.close()
+        if self.fileName != "-":
+            self.outputFile.close()
 
 ###################################################################################################
 

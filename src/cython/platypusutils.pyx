@@ -34,7 +34,7 @@ from fastafile cimport FastaFile
 
 ###################################################################################################
 
-PLATYPUS_VERSION = "0.7.7"
+PLATYPUS_VERSION = "0.7.9.3"
 
 ###################################################################################################
 
@@ -474,12 +474,9 @@ cdef list loadBAMData(list bamFiles, bytes chrom, int start, int end, options, l
             readIterator = reader.fetch(chrom, start, end)
             brokenMateCoords = []
 
-            counter = 0
-
             while readIterator.cnext():
 
                 theRead = createRead(readIterator.b, 0, NULL)
-                counter += 1
 
                 if chromID == -1:
                     chromID = theRead.chromID
@@ -509,9 +506,6 @@ cdef list loadBAMData(list bamFiles, bytes chrom, int start, int end, options, l
 
                 if totalReads >= maxReads:
                     # Explicitly clear up memory, as Cython doesn't seem to do this
-                    #del(theReadBuffer)
-                    #for theReadBuffer in readBuffers:
-                    #    del(theReadBuffer)
                     logger.warning("Too many reads (%s) in region %s:%s-%s. Quitting now. Either reduce --bufferSize or increase --maxReads." %(totalReads, chrom, start, end))
                     return None
 
@@ -936,16 +930,36 @@ def getRegions(options):
 
     if options.regions is not None and os.path.exists(options.regions[0]):
 
-        theFile = open(options.regions[0], 'r')
+        # Text file with regions in format chr:start-end
+        if options.regions[0].endswith(".txt"):
 
-        for line in theFile:
-            chr,region = line.split(":")
-            start = int(region.split("-")[0])
-            end = int(region.split("-")[1])
+            logger.info("Interpreting --regions argument (%s) as a text file with regions in the format chr:start-end" %(options.regions[0]))
 
-            regions.append( (chr,start,end) )
+            with open(options.regions[0], 'r') as theFile:
+                for line in theFile:
+                    chrom,region = line.split(":")
+                    start = int(region.split("-")[0])
+                    end = int(region.split("-")[1])
 
-        return regions
+                    regions.append( (chrom,start,end) )
+
+        # BED file with regions in format chr\start\tend
+        elif options.regions[0].endswith(".bed"):
+
+            logger.info("Interpreting --regions argument (%s) as a BED file with regions in the format chr\tstart\tend" %(options.regions[0]))
+
+            with open(options.regions[0], 'r') as theFile:
+                for line in theFile:
+                    try:
+                        cols = line.split("\t")
+                        chrom = cols[0]
+                        start = int(cols[1])
+                        end = int(cols[2])
+                        regions.append( (chrom,start,end) )
+                    except:
+                        logger.debug("Could not parse line in regions file (%s). Skipping..." %(options.regions[0]))
+                        logger.debug("Line was %s" %(line))
+                        continue
 
     elif options.regions == None:
 
@@ -957,37 +971,38 @@ def getRegions(options):
             for region,regionTuple in refFile.refs.iteritems():
                 regions.append((region, 1, regionTuple.SeqLength))
 
-    elif os.path.isfile(options.regions[0]): # Could be a file...
-        regionFile = open( options.regions[0] )
-        regions = regionFile.readlines()
-        regionFile.close()
     else:
         for region in options.regions:
 
             split = region.split(":")
-            chr = bytes(split[0])
+            chrom = bytes(split[0])
 
             if len( split ) == 2 :
                 [ start, end ] = split[1].split("-")
-                regions.append((chr,int(start),int(end)))
+                regions.append((chrom,int(start),int(end)))
+
+                if regions[-1][2] - regions[-1][1] > 1e9:
+                    logger.error("Input region (%s) is too long. Try again" %(region))
+                    raise StandardError, "Invalid input region: %s" (region)
+
             elif len(split) == 1:
                 start = 1
                 try:
                     header = file.header
                     pivot = dict(zip([d['SN'] for d in header['SQ']], [d['LN'] for d in header['SQ']]))
-                    end = pivot[chr]
-                    regions.append((chr,int(start),int(end)))
+                    end = pivot[chrom]
+                    regions.append((chrom,int(start),int(end)))
                 except:
                     regions = []
                     for region,regionTuple in refFile.refs.iteritems():
-                        if region == chr:
+                        if region == chrom:
                             regions.append((region, 1, regionTuple.SeqLength))
             else:
-                regions.append((chr,None,None))
+                regions.append((chrom,None,None))
 
     if len(regions) == 0:
         logger.error("Platypus found no regions to search. Check that you are using the correct reference FASTA file or have specified the 'regions' argument correctly")
-    elif len(regions) < 1000:
+    elif len(regions) < 100:
         logger.debug("The following regions will be searched: %s" %(regions))
     else:
         logger.debug("%s regions will be searched" % len(regions))

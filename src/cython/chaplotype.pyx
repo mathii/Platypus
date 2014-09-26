@@ -20,7 +20,6 @@ cimport cerrormodel
 from calign cimport hash_sequence, hash_sequence_multihit, hashReadForMapping
 from calign cimport mapAndAlignReadToHaplotype
 from fastafile cimport FastaFile
-from samtoolsWrapper cimport AlignedRead
 from samtoolsWrapper cimport cAlignedRead
 from samtoolsWrapper cimport Read_IsReverse
 from samtoolsWrapper cimport Read_IsPaired
@@ -117,6 +116,8 @@ cdef int computeOverlapOfReadAndHaplotype(int hapStart, int hapEnd, cAlignedRead
 
 ###################################################################################################
 
+@cython.final
+@cython.freelist(500)
 cdef class Haplotype:
     """
     Class to encapsulate a single haplotype. This will store all the
@@ -174,14 +175,15 @@ cdef class Haplotype:
         if self.hapLen > hash_size:
             logger.error("Haplotype with vars %s has len %s. Start is %s. End is %s. maxReadLen = %s" %(self.variants, self.hapLen, self.startPos, self.endPos, maxReadLength))
             logger.debug(self.haplotypeSequence)
+            raise StandardError, "Haplotype is too long. Max allowed length is %s" %(hash_size)
 
         self.cHomopolQ = homopolq
         self.hapSequenceHash = NULL
         self.hapSequenceNextArray = NULL
         self.likelihoodCache = NULL
         self.lenCache = 0
-        self.mapCounts = <int*>malloc( (self.hapLen+maxReadLength)*sizeof(int) )
-        self.mapCountsLen = self.hapLen + maxReadLength
+        self.mapCounts = <int*>malloc( (2*(self.hapLen+maxReadLength))*sizeof(int) )
+        self.mapCountsLen = 2*(self.hapLen + maxReadLength)
 
     def __dealloc__(self):
         """
@@ -553,13 +555,12 @@ cdef class Haplotype:
         cdef int homopol = -1
         cdef int homopollen = 0
 
-        self.localGapOpen = <short*>malloc(self.hapLen*sizeof(short))
+        self.localGapOpen = <short*>(malloc(self.hapLen*sizeof(short)))
 
         homopol = -1
         homopollen = 0
 
         while index > 0:
-
             index -= 1
 
             if seq[index] == homopol:

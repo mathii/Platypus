@@ -8,6 +8,7 @@ from __future__ import division
 import multiprocessing
 import variantcaller
 import extendedoptparse
+import sys
 import os
 import random
 import heapq
@@ -302,7 +303,10 @@ def mergeVCFFiles(tempFileNames, finalFileName, log):
     log.info("Merging output VCF file(s) into final file %s" %(finalFileName))
 
     # Final output file
-    outputVCF = open(finalFileName, 'wb')
+    if finalFileName == "-":
+        outputVCF = sys.stdout
+    else:
+        outputVCF = open(finalFileName, 'wb')
     theHeap = []
 
     # Initialise queue
@@ -342,7 +346,8 @@ def mergeVCFFiles(tempFileNames, finalFileName, log):
             continue
 
     # Close final output file
-    outputVCF.close()
+    if finalFileName != "-":
+        outputVCF.close()
     log.info("Finished merging VCF file(s)")
 
 ###################################################################################################
@@ -373,13 +378,13 @@ def runVariantCaller(options, continuing=False):
     fh.setFormatter(formatter)
 
     if options.verbosity == 0:
-        log.setLevel(logging.ERROR)
+        log.setLevel(logging.DEBUG)
         ch.setLevel(logging.ERROR)
-        fh.setLevel(logging.ERROR)
+        fh.setLevel(logging.DEBUG)
     elif options.verbosity == 1:
-        log.setLevel(logging.WARNING)
+        log.setLevel(logging.DEBUG)
         ch.setLevel(logging.WARNING)
-        fh.setLevel(logging.WARNING)
+        fh.setLevel(logging.DEBUG)
     elif options.verbosity == 2:
         log.setLevel(logging.DEBUG)
         ch.setLevel(logging.INFO)
@@ -410,10 +415,17 @@ def runVariantCaller(options, continuing=False):
         regions = sorted(platypusutils.getRegions(options), cmp=regionSort)
 
     if options.nCPU == 1:
-        fileName = options.output + "_temp_1.gz"
+        fileName = None
+
+        if options.output == "-":
+            fileName = options.output
+        else:
+            fileName = options.output + "_temp_1.gz"
+
         p1 = PlatypusSingleProcess(fileName, options, regions, continuing)
         p1.run()
-        mergeVCFFiles([fileName], options.output, log)
+        if options.output != "-":
+            mergeVCFFiles([fileName], options.output, log)
     else:
         # Create process manager
         fileNames = set()
@@ -472,11 +484,13 @@ def callVariants(args):
     parser.add_option("--minReads", dest="minReads", help="Minimum number of supporting reads required before a variant candidate will be considered.", action='store', type='int', default=2)
     parser.add_option("--maxReads", dest="maxReads", help="Maximium coverage in window", action='store', type='float', default=5000000)
     parser.add_option("--verbosity", dest="verbosity", help="Level of logging", action='store', type='int', default=2)
-    parser.add_option("--maxReadLength", dest="rlen", help="Maximum read length", action='store', type = 'int', default=100)
+    parser.add_option("--maxReadLength", dest="rlen", help="Maximum read length", action='store', type = 'int', default=150)
     parser.add_option("--logFileName", dest="logFileName", help="Name of log file", action='store', type='string', default="log.txt")
     parser.add_option("--source", dest="sourceFile", help="vcf file(s) to get candidates from", action='store', type='list', default=None)
     parser.add_option("--nCPU", dest="nCPU", help="Number of processors to use", action='store', type='int', default=1)
     parser.add_option("--parseNCBI", dest="parseNCBI", help="", type=int, action='store', default=0)
+    parser.add_option("--longHaps", dest="longHaps", help="If this is set to 1, then don't trim replacement variants from input VCFs.", type='int', action='store', default=0)
+    parser.add_option("--alignScoreFile", dest="alignScoreFile", help="If this is set to a string, then alignment scores of reads to haplotypes will be writen to this file.", type='string', action='store', default="")
     parser.add_option("--compressReads", dest="compressReads", help="If this is set to 1, then all reads will be compressed, and decompressd on demand. This will slow things down, but reduce memory usage.", type='int', action='store', default=0)
     parser.add_option("--qualBinSize", dest="qualBinSize", help="This sets the granularity used when compressing quality scores. If > 1 then quality compression is lossy", type='int', action='store', default=1)
 
@@ -538,6 +552,7 @@ def callVariants(args):
     
     # Genome VCF parameters
     parser.add_option("--outputRefCalls", dest="outputRefCalls", help="If 1, output block reference calls.", action='store', type='int', default=0)
+    parser.add_option("--refCallBlockSize", dest="refCallBlockSize", help="Max size of reference call block.", action='store', type='int', default=1000)
 
     (options, args) = parser.parse_args(args)
     runVariantCaller(options)

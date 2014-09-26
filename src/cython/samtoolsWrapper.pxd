@@ -1,4 +1,4 @@
-
+import cython
 
 cdef extern from "string.h":
   ctypedef int size_t
@@ -216,28 +216,22 @@ cdef extern from "pysam_util.h":
         int	end
 
     bam_fetch_iterator_t* bam_init_fetch_iterator(bamFile* fp, bam_index_t *idx, int tid, int beg, int end)
-    bam1_t * bam_fetch_iterate(bam_fetch_iterator_t *iter)
+    bam1_t * bam_fetch_iterate(bam_fetch_iterator_t *iter) nogil
     void bam_cleanup_fetch_iterator(bam_fetch_iterator_t *iter)
 
 ###################################################################################################
 cdef class Samfile
 
+@cython.final
 cdef class IteratorRow:
     cdef bam_fetch_iterator_t*  bam_iter # iterator state object
     cdef bam1_t* b
     cdef int useIndex
-    cdef int cnext(self)
+    cdef int cnext(self) nogil
 
 ###################################################################################################
 
-cdef class IteratorRowAll:
-    cdef bam1_t* b
-    cdef samfile_t* fp
-    cdef bam1_t* getCurrent(self)
-    cdef int cnext(self)
-
-###################################################################################################
-
+@cython.final
 cdef class Samfile:
     cdef char* filename
     cdef samfile_t* samfile
@@ -255,56 +249,10 @@ cdef class Samfile:
     cdef char* getrname(self, int tid)
     cdef _parseRegion(self, reference=*, start=*, end=*, region=*)
     cpdef IteratorRow fetch(self, char* reference, int start, int end)
-    cpdef IteratorRowAll fetchAllReads(self)
     cpdef close(self)
     cdef void loadOffsetsForRegions(self, list regions)
     #cdef void cleanUpOffsetsForRegions(self)
     cdef void openBAMFile(self, mode)
-
-###################################################################################################
-
-cdef class AlignedRead:
-    cdef bam1_t* _delegate
-    cdef int hashValue
-    cdef int readEnd
-    cdef char* _seq
-    cdef char* _qual
-    cpdef object qname(AlignedRead self)
-    cdef char* fastQName(AlignedRead self)
-    cdef char* seq(AlignedRead self)
-    cdef char* qual(AlignedRead self)
-    cdef dict tags(AlignedRead self)
-    cdef int flag(AlignedRead self)
-    cdef int rname(AlignedRead self)
-    cdef int getCigarLength(AlignedRead self)
-    cdef int pos(AlignedRead self)
-    cdef int end(AlignedRead self)
-    cdef bin(AlignedRead self)
-    cdef int getCigarOpCode(AlignedRead self, int index)
-    cdef int getCigarOpLength(AlignedRead self, int index)
-    cdef int rlen(AlignedRead self)
-    cpdef int mapq(AlignedRead self)
-    cdef int mrnm(AlignedRead self)
-    cdef int mpos(AlignedRead self)
-    cdef int isize(AlignedRead self)
-    cdef int is_paired(AlignedRead self)
-    cdef int is_proper_pair(AlignedRead self)
-    cdef int is_unmapped(AlignedRead self)
-    cdef int mate_is_unmapped(AlignedRead self)
-    cdef int is_reverse(AlignedRead self)
-    cdef int mate_is_reverse(AlignedRead self)
-    cdef int is_read1(AlignedRead self)
-    cdef int is_read2(AlignedRead self)
-    cdef int is_secondary(AlignedRead self)
-    cdef int is_qcfail(AlignedRead self)
-    cdef int is_duplicate(AlignedRead self)
-    cdef opt(AlignedRead self, tag)
-
-###################################################################################################
-
-cdef AlignedRead makeAlignedRead(bam1_t* src)
-cdef cAlignedRead* createRead(bam1_t * src, int storeRgID, char** rgID)
-cdef void destroyRead(cAlignedRead* theRead)
 
 ###################################################################################################
 
@@ -326,6 +274,11 @@ ctypedef struct cAlignedRead:
 
 ###################################################################################################
 
+cdef cAlignedRead* createRead(bam1_t * src, int storeRgID, char** rgID)
+cdef void destroyRead(cAlignedRead* theRead)
+
+###################################################################################################
+
 # These are bits set in the BAM bit-flag.
 DEF BAM_FPAIRED = 1        # Read is paired in sequencing, no matter whether it is mapped in a pair
 DEF BAM_FPROPER_PAIR = 2   # Read is mapped in a proper pair
@@ -343,52 +296,68 @@ DEF BAM_FCOMPRESSED = 2048 # Is the read compressed
 ###################################################################################################
 
 # And here are accessor functions for the bit-fields
-cdef inline int Read_IsReverse(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsReverse(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FREVERSE) != 0)
 
-cdef inline int Read_IsPaired(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsPaired(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FPAIRED) != 0)
 
-cdef inline int Read_IsProperPair(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsProperPair(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FPROPER_PAIR) != 0)
 
-cdef inline int Read_IsDuplicate(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsDuplicate(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FDUP) != 0)
 
-cdef inline int Read_IsUnmapped(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsUnmapped(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FUNMAP) != 0)
 
-cdef inline int Read_MateIsUnmapped(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_MateIsUnmapped(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FMUNMAP) != 0)
 
-cdef inline int Read_MateIsReverse(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_MateIsReverse(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FMREVERSE) != 0)
 
-cdef inline int Read_IsQCFail(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsQCFail(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FQCFAIL) != 0)
 
-cdef inline int Read_IsReadOne(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsReadOne(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FREAD1) != 0)
 
-cdef inline int Read_IsSecondaryAlignment(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsSecondaryAlignment(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FSECONDARY) != 0)
 
-cdef inline int Read_IsCompressed(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_IsCompressed(cAlignedRead* theRead) nogil:
     return ( (theRead.bitFlag & BAM_FCOMPRESSED) != 0)
 
-cdef inline int Read_SetIsNotReverse(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_SetIsNotReverse(cAlignedRead* theRead) nogil:
     theRead.bitFlag &= (~BAM_FREVERSE)
 
-cdef inline int Read_SetIsReverse(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline int Read_SetIsReverse(cAlignedRead* theRead) nogil:
     theRead.bitFlag |= BAM_FREVERSE
 
-cdef inline void Read_SetQCFail(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline void Read_SetQCFail(cAlignedRead* theRead) nogil:
     theRead.bitFlag |= BAM_FQCFAIL
 
-cdef inline void Read_SetCompressed(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline void Read_SetCompressed(cAlignedRead* theRead) nogil:
     theRead.bitFlag |= BAM_FCOMPRESSED
 
-cdef inline void Read_SetUnCompressed(cAlignedRead* theRead):
+@cython.profile(False)
+cdef inline void Read_SetUnCompressed(cAlignedRead* theRead) nogil:
     theRead.bitFlag &= (~BAM_FCOMPRESSED)
 
 ###################################################################################################

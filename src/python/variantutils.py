@@ -71,6 +71,10 @@ class VariantCandidateReader(object):
 
             for line in vcfLines:
 
+                if not isValidVcfLine(line):
+                    continue
+
+                # Get the components of the VCF line
                 chrom = line.contig
                 pos = line.pos
                 ref = line.ref
@@ -124,6 +128,10 @@ class VariantCandidateReader(object):
 
                     # Anything else
                     else:
+                        if self.options.longHaps ==1:
+                            var = Variant(chromosome, pos, ref, alt, 0, FILE_VAR)
+                            varList.append(var)
+                            continue
 
                         # VCF4 is -1 indexed for indels, so trim off first base
                         tempRef = ref[1:]
@@ -142,8 +150,8 @@ class VariantCandidateReader(object):
                             tempPos +=1
 
                         # Skip weird cases for now
-                        if len(removed) != 0 and len(added) != 0:
-                            continue
+                        #if len(removed) != 0 and len(added) != 0:
+                        #    continue
                             #logger.error("Dodgy variant found at %s:%s, with ref=%s, alt = %s" %(chrom,pos,ref,alt))
                             #logger.error("This will probably break something later on...")
 
@@ -153,5 +161,37 @@ class VariantCandidateReader(object):
         varList = sorted(list(set(varList)))
         logger.debug("Found %s variants in region %s in source file" %(len(varList), "%s:%s-%s" %(chromosome,start,end)))
         return varList
+
+###################################################################################################
+
+# Performs basic validation checks on a single VCF file line.
+def isValidVcfLine(line):
+
+    chromosome = line.contig # TODO any possible checks on chromosome?
+    position   = line.pos
+    reference  = line.ref
+    variants   = line.alt.split(",")
+
+    try:
+        if int(position) < 0:
+            return False
+    except ValueError:
+        logger.warning("Non inetgral position at chromosome " + chromosome)
+        return False
+
+    validBases = set(['A', 'C', 'G', 'T', 'N'])
+
+    invalidBasesInReference = set(reference) - validBases
+    if len(invalidBasesInReference) > 0:
+        logger.warning("Invalid reference sequence at chromosome " + chromosome)
+        return False
+
+    for variant in variants:
+        invalidBasesInVariant = set(variant) - validBases
+        if len(invalidBasesInVariant) > 0:
+            logger.warning("Invalid alternative at chromosome " + chromosome)
+            return False
+
+    return True
 
 ###################################################################################################
