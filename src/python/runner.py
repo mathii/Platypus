@@ -493,6 +493,7 @@ def callVariants(args):
     parser.add_option("--mergeClusteredVariants", dest="mergeClusteredVariants", help="If set to 1, variant-containing windows which are close together will be merged, resulting in slower, more accurate variant calls in diverse regions", action='store', type='int', default=1)
     parser.add_option("--minFlank", dest="minFlank", help="Ignore base-changes closer than minFlank bases to the end of reads. Also, merge SNPs within this distance into MNPs or complex replacements", action='store', type = 'int', default=10)
     parser.add_option("--trimReadFlank", dest="trimReadFlank", help="Set base-qualities to 0 within 'trimReadFlank' bases of the end of reads", action='store', type = 'int', default=0)
+    parser.add_option("--atQualCap", dest="atQualCap", help="Cap the base qualities of A and T bases to this", action='store', type = 'int', default=0)    
     parser.add_option("--lowRefAlleleBias", dest="lowRefAlleleBias", help="If set to 1, sites with few reference allele reads are allowed to fail allele bias filter", action='store', type = 'int', default=0)    
     parser.add_option("--filterVarsByCoverage", dest="filterVarsByCoverage", help="If 1, Platypus filters variants in difficult regions by the number of times each variant is seen.", action='store', type='int', default=1)
     parser.add_option("--filteredReadsFrac", dest="filteredReadsFrac", help="If > this fraction of reads are filtered in a given window, the 'badReads filter is triggered.", action='store', type='float', default=0.7)
@@ -533,7 +534,8 @@ def callVariants(args):
     parser.add_option("--rmsmqThreshold", dest="rmsmqThreshold", help="RMSMQ filter triggers when root-mean-square mapping quality across region containing variant is below this.", action='store', type='int', default=40)
     parser.add_option("--qdThreshold", dest="qdThreshold", help="QD filter triggers quality/depth for variant is below this.", action='store', type='int', default=10)
     parser.add_option("--hapScoreThreshold", dest="hapScoreThreshold", help="HapScore filter triggers HapScore for variant is above this.", action='store', type='int', default=4)
-
+    parser.add_option("--minCTRevSupport", dest="minCTRevSupport", help="Flag C->T snps [or G->A] as Damage if there are less than this many supporting reads on the reverse [forward] strand.", action='store', type='int', default=0)
+    
     # Genome VCF parameters
     parser.add_option("--outputRefCalls", dest="outputRefCalls", help="If 1, output block reference calls.", action='store', type='int', default=0)
 
