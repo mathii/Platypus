@@ -16,6 +16,7 @@ setup(name="extendedoptparse", py_modules=['python/extendedoptparse'])
 setup(name="vcf", py_modules=['python/vcf'])
 setup(name="runner", py_modules=['python/runner'])
 setup(name="adna", py_modules=['python/adna'])
+setup(name="Platypus", py_modules=['python/Platypus'])
 
 
 #

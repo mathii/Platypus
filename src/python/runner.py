@@ -513,6 +513,8 @@ def callVariants(args):
     parser.add_option("--filteredReadsFrac", dest="filteredReadsFrac", help="If > this fraction of reads are filtered in a given window, the 'badReads filter is triggered.", action='store', type='float', default=0.7)
     parser.add_option("--maxVarDist", dest="maxVarDist", help="Max distance between variants to be considered in the same window", action='store', type='int', default=15) # 9 is 1 base longer than the max possible alignment shift
     parser.add_option("--minVarDist", dest="minVarDist", help="Min distance allowed between windows", action='store', type='int', default=9) # 9 is 1 base longer than the max possible alignment shift
+    parser.add_option("--useEMLikelihoods", dest="useEMLikelihoods", help="If 1, likelihoods computed from EM algorithm will be used to call genotypes for each sample, otherwise likelihoods from individual sample will be used.", action='store', type='int', default=0)
+    parser.add_option("--countOnlyExactIndelMatches", dest="countOnlyExactIndelMatches", help="If 1, only exactly matching indels will be counted in the NV field", action='store', type='int', default=0)
 
     #aDNA calling parameters 
     parser.add_option("--damageProfile", dest="damageProfile", help="columns ACCT; rows distance from ends; phred scores", action="callback", callback=adna.damageProfileCallback, type='str', default=None)
