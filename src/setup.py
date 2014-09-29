@@ -15,7 +15,7 @@ setup(name="platypusexceptions", py_modules=['python/platypusexceptions'])
 setup(name="extendedoptparse", py_modules=['python/extendedoptparse'])
 setup(name="vcf", py_modules=['python/vcf'])
 setup(name="runner", py_modules=['python/runner'])
-setup(name="Platypus", py_modules=['python/Platypus'])
+setup(name="adna", py_modules=['python/adna'])
 
 
 #

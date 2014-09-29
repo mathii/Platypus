@@ -9,7 +9,7 @@ PLATYPUS_SO := $(PLATYPUS_C:.c=.so)
 
 # Python source files needed for building release
 PYTHONSRC := src/python/Platypus.py src/python/platypusexceptions.py src/python/runner.py src/python/variantutils.py\
-src/python/window.py src/python/vcf.py src/python/filez.py src/python/extendedoptparse.py
+src/python/window.py src/python/vcf.py src/python/filez.py src/python/extendedoptparse.py src/python/adna.py
 
 VERSION := 0.7.9.3
 TARGET := Platypus_${VERSION}
