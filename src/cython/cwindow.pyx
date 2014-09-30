@@ -573,8 +573,8 @@ cdef class bamReadBuffer(object):
         cdef int dlen_3 = min(self.damageProfile["length"], int(theRead.rlen/2)+1)
         
         cdef str isCpG =""
-        print theRead.seq
-        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
+#        print theRead.seq
+#        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
 
         #TODO - do first and last base separately
         end="5"
@@ -623,12 +623,11 @@ cdef class bamReadBuffer(object):
                 Dx=self.damageProfile[isCpG][end][chr(base)][rindex]
                 theRead.qual[index]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
             
-        print len(theRead.seq)
-        print len(theRead.qual)
-        print theRead.qual[83]
-        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
+#        print len(theRead.seq)
+#        print len(theRead.qual)
+#        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
 
-        os._exit(0)
+#        os._exit(0)
         
     cdef void addReadToBuffer(self, cAlignedRead* theRead):
         """
