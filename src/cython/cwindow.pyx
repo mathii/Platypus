@@ -6,11 +6,13 @@ Fast cython implementation of some windowing functions.
 #from __future__ import division
 
 import cython
+from numpy.core.defchararray import rindex
 
 cimport samtoolsWrapper
 
 import logging
 import math
+import os
 
 from samtoolsWrapper cimport createRead
 from samtoolsWrapper cimport destroyRead
@@ -331,7 +333,9 @@ cdef int bisectReadsRight(cAlignedRead** reads, int testPos, int nReads, int tes
 
 ###################################################################################################
 
-cdef int checkAndTrimRead(cAlignedRead* theRead, cAlignedRead* theLastRead, int minGoodQualBases, int* filteredReadCountsByType, int minMapQual, int minBaseQual, int minFlank, int trimOverlapping, int trimAdapter, int trimReadFlank, int atQualCap):
+cdef int checkAndTrimRead(cAlignedRead* theRead, cAlignedRead* theLastRead, int minGoodQualBases, 
+                          int* filteredReadCountsByType, int minMapQual, int minBaseQual, int minFlank, 
+                          int trimOverlapping, int trimAdapter, int trimReadFlank, bint trimBothFlanks, int atQualCap):
     """
     Performs various quality checks on the read, and trims read (i.e. set q-scores to zero). Returns
     true if read is ok, and false otherwise.
@@ -411,8 +415,7 @@ cdef int checkAndTrimRead(cAlignedRead* theRead, cAlignedRead* theLastRead, int 
     ## any overlapping pairs, from small fragments, will have the overlapping bits trimmed.
 
     # Trim low-quality tails for forward reads
-    if not Read_IsReverse(theRead):
-
+    if not Read_IsReverse(theRead) or trimBothFlanks:
         for index from 1 <= index <= theRead.rlen:
             if index <= trimReadFlank or theRead.qual[theRead.rlen - index] < 5:
                 theRead.qual[theRead.rlen - index] = 0
@@ -420,10 +423,9 @@ cdef int checkAndTrimRead(cAlignedRead* theRead, cAlignedRead* theLastRead, int 
                 break
 
     # Trim low-quality tails for reverse reads
-    else:
+    if Read_IsReverse(theRead) or trimBothFlanks:
         for index from 0 <= index < theRead.rlen:
-
-            if index <= trimReadFlank or theRead.qual[index] < 5:
+            if index < trimReadFlank or theRead.qual[index] < 5:
                 theRead.qual[index] = 0
             else:
                 break
@@ -508,6 +510,8 @@ cdef class bamReadBuffer(object):
         self.minBaseQual = options.minBaseQual
         self.minFlank = options.minFlank
         self.trimReadFlank = options.trimReadFlank
+        self.trimBothFlanks = options.trimBothFlanks
+        self.damageProfile=options.damageProfile
         self.atQualCap = options.atQualCap
         self.minMapQual = options.minMapQual
         self.minGoodBases = options.minGoodQualBases
@@ -561,6 +565,71 @@ cdef class bamReadBuffer(object):
         """
         free(self.filteredReadCountsByType)
 
+    cdef void damageProfileRecalibration(self, cAlignedRead* theRead):
+        """
+        Recalibrate the qualities according to the supplied profile
+        """
+        cdef int dlen_5 = min(self.damageProfile["length"], int(theRead.rlen/2))
+        cdef int dlen_3 = min(self.damageProfile["length"], int(theRead.rlen/2)+1)
+        
+        cdef str isCpG =""
+        print theRead.seq
+        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
+
+        #TODO - do first and last base separately
+        end="5"
+        base=theRead.seq[0]                
+        nextBase=theRead.seq[1]
+        if base!=78: #"N"
+            isCpG="noCpG"
+            if nextBase==71: #"C"
+                isCpG="CpG"
+            Q=int(theRead.qual[0])
+            Dx=self.damageProfile[isCpG][end][chr(base)][0]
+            theRead.qual[0]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
+        for index from 1 <= index < dlen_5:
+            lastBase=theRead.seq[index-1]
+            base=theRead.seq[index]                
+            nextBase=theRead.seq[index+1]
+            if base!=78: #"N"
+                isCpG="noCpG"
+                if lastBase==67 or nextBase==71: #"C", "G"
+                    isCpG="CpG"
+                Q=int(theRead.qual[index])
+                Dx=float(self.damageProfile[isCpG][end][chr(base)][index])
+                theRead.qual[index]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
+            
+        end="3"
+        base=theRead.seq[theRead.rlen-1]                
+        lastBase=theRead.seq[theRead.rlen-2]
+        if base!=78: #"N"
+            isCpG="noCpG"
+            if lastBase==67: #"G"
+                isCpG="CpG"
+            Q=int(theRead.qual[theRead.rlen-1])
+            Dx=float(self.damageProfile[isCpG][end][chr(base)][0])
+            theRead.qual[theRead.rlen-1]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
+
+        for rindex from 1 <= rindex < dlen_3:
+            index=theRead.rlen-1-rindex
+            lastBase=theRead.seq[index-1]
+            base=theRead.seq[index]                
+            nextBase=theRead.seq[index+1]
+            if base!=78: #"N"            
+                isCpG="noCpG"
+                if lastBase==67 or nextBase==71: #"C", "G"
+                    isCpG="CpG"
+                Q=int(theRead.qual[index])
+                Dx=self.damageProfile[isCpG][end][chr(base)][rindex]
+                theRead.qual[index]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
+            
+        print len(theRead.seq)
+        print len(theRead.qual)
+        print theRead.qual[83]
+        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
+
+        os._exit(0)
+        
     cdef void addReadToBuffer(self, cAlignedRead* theRead):
         """
         Add a new read to the buffer, making sure to re-allocate
@@ -581,15 +650,22 @@ cdef class bamReadBuffer(object):
 
             # TODO: Check that this works for duplicates when first read goes into bad reads pile...
             if self.lastRead != NULL:
-                readOk = checkAndTrimRead(theRead, self.lastRead, self.minGoodBases, self.filteredReadCountsByType, self.minMapQual, self.minBaseQual, self.minFlank, self.trimOverlapping, self.trimAdapter, self.trimReadFlank, self.atQualCap)
+                readOk = checkAndTrimRead(theRead, self.lastRead, self.minGoodBases, self.filteredReadCountsByType, 
+                                          self.minMapQual, self.minBaseQual, self.minFlank, self.trimOverlapping, 
+                                          self.trimAdapter, self.trimReadFlank, self.trimBothFlanks, self.atQualCap)
 
                 if self.lastRead.pos > theRead.pos:
                     self.isSorted = False
             else:
-                readOk = checkAndTrimRead(theRead, NULL, self.minGoodBases, self.filteredReadCountsByType, self.minMapQual, self.minBaseQual, self.minFlank, self.trimOverlapping, self.trimAdapter, self.trimReadFlank, self.atQualCap)
+                readOk = checkAndTrimRead(theRead, NULL, self.minGoodBases, self.filteredReadCountsByType, 
+                                          self.minMapQual, self.minBaseQual, self.minFlank, self.trimOverlapping, 
+                                          self.trimAdapter,self.trimReadFlank, self.trimBothFlanks, self.atQualCap)
 
             self.lastRead = theRead
 
+            if self.damageProfile:
+                self.damageProfileRecalibration(theRead)
+            
             # Put read into bad array, and remove from good array
             if not readOk:
                 self.badReads.append(theRead)

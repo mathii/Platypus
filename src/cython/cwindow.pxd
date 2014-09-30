@@ -40,11 +40,13 @@ cdef class bamReadBuffer:
     cdef int minBaseQual
     cdef int minFlank
     cdef int trimReadFlank
+    cdef bint trimBothFlanks
     cdef int atQualCap
     cdef int verbosity
     cdef int minGoodBases
     cdef int trimOverlapping
     cdef int trimAdapter
+    cdef dict damageProfile
     cdef cAlignedRead* lastRead
     cdef bytes sample
     cdef ReadArray reads
@@ -53,6 +55,7 @@ cdef class bamReadBuffer:
     cdef void setWindowPointers(self, int start, int end, int refStart, int refEnd, char* refSeq, int qualBinSize)
     cdef void recompressReadsInCurrentWindow(self, int refStart, int refEnd, char* refSeq, int qualBinSize, int compressReads)
     cdef void addReadToBuffer(self, cAlignedRead* theRead)
+    cdef void damageProfileRecalibration(self, cAlignedRead* theRead)
     cdef int countImproperPairs(self)
     cdef int countAlignmentGaps(self)
     cdef void sortReads(self)

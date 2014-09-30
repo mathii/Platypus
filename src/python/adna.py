@@ -64,11 +64,18 @@ def damageProfileCallback(option, opt_str, infile, parser):
             for key in keys[i]:
                 profile[key[0]][key[1]][key[2]][l]=bits[i]
 
+    profile["length"]=l+1
+
     logger.info("Read damage profile as follows")
     for k0,v0 in profile.items():
-        for k1,v1 in v0.items():
-            for k2,v2 in v1.items():
-                logger.info(k0+"_"+k1+"_"+k2+" : "+",".join([str(x) for x in v2]))
+        if k0=="length":
+            logger.info("length:" + str(v0))
+        else:
+            for k1,v1 in v0.items():
+                for k2,v2 in v1.items():
+                    logger.info(k0+"_"+k1+"_"+k2+" : "+",".join([str(x) for x in v2]))
+
+    
     parser.values.damageProfile=profile
         
     
