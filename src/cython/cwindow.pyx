@@ -569,10 +569,11 @@ cdef class bamReadBuffer(object):
         """
         Recalibrate the qualities according to the supplied profile
         """
-        cdef int dlen_5 = min(self.damageProfile["length"], int(theRead.rlen/2))
-        cdef int dlen_3 = min(self.damageProfile["length"], int(theRead.rlen/2)+1)
+        cdef int dlen_5 = int(theRead.rlen/2)
+        cdef int dlen_3 = int(theRead.rlen/2)+1
         
-        cdef str isCpG =""
+        cdef str context =""
+        cdef int proflen=self.damageProfile["length"]-1
 #        print theRead.seq
 #        print "".join([chr(int(theRead.qual[x])+33) for x in range(len(theRead.seq))])
 
@@ -581,33 +582,36 @@ cdef class bamReadBuffer(object):
         base=theRead.seq[0]                
         nextBase=theRead.seq[1]
         if base!=78: #"N"
-            isCpG="noCpG"
-            if nextBase==71: #"C"
-                isCpG="CpG"
+            context="N"
+            if nextBase==67: #"G"
+                context="XG"
             Q=int(theRead.qual[0])
-            Dx=self.damageProfile[isCpG][end][chr(base)][0]
+            Dx=self.damageProfile[context][end][chr(base)][0]
             theRead.qual[0]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
+        
         for index from 1 <= index < dlen_5:
             lastBase=theRead.seq[index-1]
             base=theRead.seq[index]                
             nextBase=theRead.seq[index+1]
             if base!=78: #"N"
-                isCpG="noCpG"
-                if lastBase==67 or nextBase==71: #"C", "G"
-                    isCpG="CpG"
+                context="N"
+                if nextBase==67: #"G"
+                    context="XG"
+                elif lastBase==71: #"C"
+                    context="CX"    
                 Q=int(theRead.qual[index])
-                Dx=float(self.damageProfile[isCpG][end][chr(base)][index])
+                Dx=float(self.damageProfile[context][end][chr(base)][min(index, proflen)])
                 theRead.qual[index]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
             
         end="3"
         base=theRead.seq[theRead.rlen-1]                
         lastBase=theRead.seq[theRead.rlen-2]
         if base!=78: #"N"
-            isCpG="noCpG"
-            if lastBase==67: #"G"
-                isCpG="CpG"
+            context="N"
+            if lastBase==71: #"C"
+                context="CX"    
             Q=int(theRead.qual[theRead.rlen-1])
-            Dx=float(self.damageProfile[isCpG][end][chr(base)][0])
+            Dx=float(self.damageProfile[context][end][chr(base)][0])
             theRead.qual[theRead.rlen-1]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
 
         for rindex from 1 <= rindex < dlen_3:
@@ -615,12 +619,14 @@ cdef class bamReadBuffer(object):
             lastBase=theRead.seq[index-1]
             base=theRead.seq[index]                
             nextBase=theRead.seq[index+1]
-            if base!=78: #"N"            
-                isCpG="noCpG"
-                if lastBase==67 or nextBase==71: #"C", "G"
-                    isCpG="CpG"
+            if base!=78: #"N"
+                context="N"
+                if nextBase==67: #"G"
+                    context="XG"
+                elif lastBase==71: #"C"
+                    context="CX"    
                 Q=int(theRead.qual[index])
-                Dx=self.damageProfile[isCpG][end][chr(base)][rindex]
+                Dx=self.damageProfile[context][end][chr(base)][min(rindex, proflen)]
                 theRead.qual[index]=int(-10*log10(1-(1-Dx)*(1-pow(10,-Q/10))))
             
 #        print len(theRead.seq)

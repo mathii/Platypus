@@ -4,15 +4,16 @@ Helper functions for the aDNA pipeline.
 '''
 
 ENDS=["5","3"]
-CpG=["CpG", "noCpG"]
+CONTEXT=["N", "XG", "CX"]
 BASES=["A","C","G","T"]
 
 def damageProfileCallback(option, opt_str, infile, parser): 
     '''
-    Parse the damage profile. This is defined as follows. Column headings [CpG]_[end]_[base] 
-    where CpG and end are optional. Each row has phred scores for the probability that the base 
+    Parse the damage profile. This is defined as follows. Column headings [base]_[context]_[end] 
+    where context and end are optional. Each row has probabilities for the probability that the base 
     that distance from the end is incorrect. If a column just has a base then it will fill in all
-    the CpG and end categories. Rightwards columns replace leftwards ones. First column is ignored. 
+    the context and end categories. Rightwards columns replace leftwards ones. First column is ignored. 
+    context should be either "CX" or "XG", end should be either "5" or "3" and base is "A" "C" "G" or "T"
     :param infile:
     '''
 
@@ -36,27 +37,27 @@ def damageProfileCallback(option, opt_str, infile, parser):
     for i,bit in enumerate(bits):
         key=bit.split("_")
         if len(key)==1 and key[0] in BASES:
-            for cpg in CpG:
+            for ctxt in CONTEXT:
                 for end in ENDS:
-                    keys[i].append([cpg,end,key[0]])
-        elif len(key)==2 and key[0] in ENDS and key[1] in BASES:
-            for cpg in CpG:
-                keys[i].append([cpg, key[0], key[1]])
-        elif len(key)==2 and key[0] in CpG and key[1] in BASES:
+                    keys[i].append([ctxt,end,key[0]])
+        elif len(key)==2 and key[1] in ENDS and key[0] in BASES:
+            for ctxt in CONTEXT:
+                keys[i].append([ctxt, key[1], key[0]])
+        elif len(key)==2 and key[1] in CONTEXT and key[0] in BASES:
             for end in ENDS:
-                keys[i].append([key[0], end, key[1]])
-        elif len(key)==3 and key[0] in CpG and key[1] in ENDS and key[2] in BASES:
-            keys[i].append(key)
+                keys[i].append([key[1], end, key[0]])
+        elif len(key)==3 and key[1] in CONTEXT and key[2] in ENDS and key[0] in BASES:
+            keys[i].append([key[1], key[2], key[0]])
         else:
             logger.warning("Ignoring damage profile column "+bit)
 
     profile={}
-    for cpg in CpG:
-        profile[cpg]={}
+    for ctxt in CONTEXT:
+        profile[ctxt]={}
         for end in ENDS:
-            profile[cpg][end]={}
+            profile[ctxt][end]={}
             for base in BASES:
-                profile[cpg][end][base]=[0.0]*maxbase
+                profile[ctxt][end][base]=[0.0]*maxbase
                 
     for l,line in enumerate(inlines):
         bits=[float(x) for x in line.split()[1:]]
